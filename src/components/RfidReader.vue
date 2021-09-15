@@ -84,7 +84,7 @@ export default defineComponent({
     const connect = async () => {
       const filters = [{ usbVendorId: 0x067b }];
       try {
-        console.log('Requesting port');
+        // console.log('Requesting port');
         const port = await navigator.serial.requestPort({ filters });
         rfid = new RfidReader(port);
         rfid.ready.then(() => {
