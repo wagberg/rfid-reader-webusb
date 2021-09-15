@@ -11,11 +11,11 @@ This app supports the following vendor and product ID:
 The reader uses a Prolific PL2303 USB-to-serial converter to communicate via USB.
 
 ## Serial or USB
-The app uses both the Web Serial API and the Web USB API to communicate with the reader.
+The app uses both the Web Serial API and the WebUSB API to communicate with the reader.
 For operating systems where a driver for the PL2303 chip is already loaded and the Web Serial API is supported, choose `Connect serial`.
 
 The Web Serial API is currently only supoorted by Chrome in desktop environemnts.
-For mobile use (currently only Android) the Web USB API is used to emulate a serial port.
+For mobile use (currently only Android) the WebUSB API is used to emulate a serial port.
 
 ## Notes on using USB
 Many Linux based operating systems ship with a PL2303 driver.
