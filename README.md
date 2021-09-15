@@ -36,5 +36,6 @@ However, there are ongoing discussions to whitelist certain USB devices that wil
 When this gets implementeds ,this app will probably work on Android.
 
 ## References
-* The protocol used by the reader is described [here](https://www.triades.net/13-geek/13-serial-protocol-for-a-chinese-rfid-125khz-reader-writer.html).
-* A C++ implementation can be found [here](https://github.com/merbanan/rfid_app).
+* The protocol used by the reader: https://www.triades.net/13-geek/13-serial-protocol-for-a-chinese-rfid-125khz-reader-writer.html.
+* A C++ implementation: https://github.com/merbanan/rfid_app.
+* The issue with detaching kernel drivers in Android: https://bugs.chromium.org/p/chromium/issues/detail?id=1099521.
