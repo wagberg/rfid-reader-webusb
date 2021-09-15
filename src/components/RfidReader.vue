@@ -4,31 +4,33 @@
       <v-col cols="12">
         <h1>RFID</h1>
         <p>Connect to an LF RFID reader</p>
-        <v-btn @click="connect" v-if="!connected && webSerialSupported">
+        <v-btn class="ma-2" @click="connect" v-if="!connected && webSerialSupported">
           <v-icon left>mdi-serial-port</v-icon>
           Connect serial
         </v-btn>
-        <v-btn @click="connectUsb" v-if="!connected && webUsbSupported">
+        <v-btn class="ma-2" @click="connectUsb" v-if="!connected && webUsbSupported">
           <v-icon left>mdi-usb</v-icon>
           Connect USB
         </v-btn>
-        <v-btn @click="disconnect" v-if="connected">Disconnect</v-btn>
-        <v-btn @click="toggleSound">
-          <v-icon>{{ soundIcon }}</v-icon>
-        </v-btn>
-        <p>
-          {{ connectedString }}
-        </p>
-        <p>{{ tag }}</p>
+        <v-btn class="ma-2" @click="disconnect" v-if="connected">Disconnect</v-btn>
       </v-col>
     </v-row>
     <v-row class="text-center">
       <v-col cols="12">
-        <v-btn @click="readTag" :disabled="!connected">
+        <p class="text-h4 font-weight-bold">{{ tag }}</p>
+      </v-col>
+    </v-row>
+    <v-row class="text-center">
+      <v-col cols="12">
+        <v-btn class="ma-2" @click="readTag" :disabled="!connected">
           Read tag
         </v-btn>
-        <v-btn @click="writeTag" :disabled="!connected">
+        <v-btn class="ma-2"  @click="writeTag" :disabled="!connected">
           Write tag
+        </v-btn>
+        <br>
+        <v-btn class="ma-2" @click="toggleSound">
+          <v-icon>{{ soundIcon }}</v-icon>
         </v-btn>
       </v-col>
     </v-row>
@@ -71,10 +73,9 @@ export default defineComponent({
       try {
         const device = await navigator.usb.requestDevice({ filters: [{ vendorId: 0x067b }] });
         const port = new Pl2303WebUsbSerial(device);
-        // await port.connect();
         rfid = new RfidReader(port);
         await rfid.ready;
-        connected.value = true;
+        connected.value = rfid.connected;
       } catch (error) {
         console.error(error);
       }
@@ -108,7 +109,7 @@ export default defineComponent({
       if (response.status === 0) {
         await rfid.writeRequest(new SetLedColor(LedColor.GREEN));
         if (playSound.value) await rfid.writeRequest(new Beep(5));
-        setInterval(async () => rfid.writeRequest(new SetLedColor(LedColor.NONE)), 300);
+        setTimeout(async () => rfid.writeRequest(new SetLedColor(LedColor.NONE)), 300);
       }
       tag.value = new Tag(response.data);
     };

@@ -1,3 +1,5 @@
+/* eslint-disable no-underscore-dangle */
+/// <reference types="w3c-web-serial" />
 import { RFIDError } from './Errors';
 import { SerialToFrame, FrameToData } from './Transformers';
 import { ComPort } from './Interfaces';
@@ -12,9 +14,9 @@ export default class RfidReader {
 
   connected = false;
 
-  private writeable: WritableStream<Uint8Array> | null = null;
+  private writable_: WritableStream<Uint8Array> | null = null;
 
-  private readable: ReadableStream<RfidResponse> | null = null;
+  private readable_: ReadableStream<RfidResponse> | null = null;
 
   ready: Promise<void>;
 
@@ -25,17 +27,9 @@ export default class RfidReader {
     this.ready = this.connect();
   }
 
-  async connect(): Promise<void> {
+  public async connect(): Promise<void> {
     try {
       await this.port.open({ baudRate: this.baudRate });
-      if (
-        this.port.readable == null
-        || this.port.writable == null
-      ) throw new RFIDError('Redable or writeable is null');
-      this.readable = this.port.readable
-        .pipeThrough(new TransformStream(new SerialToFrame()))
-        .pipeThrough(new TransformStream(new FrameToData()));
-      this.writeable = this.port.writable;
       const isValidReader = await this.validateReader();
       if (isValidReader) {
         this.connected = true;
@@ -43,29 +37,50 @@ export default class RfidReader {
         throw new RFIDError('The reader is not the correct model.');
       }
     } catch (error) {
+      if (error instanceof DOMException) {
+        throw error;
+      }
       console.error(error);
       this.port.close();
     }
   }
 
+  public get readable(): ReadableStream<RfidResponse> | null {
+    if (!this.readable_ && this.port.readable) {
+      this.readable_ = this.port.readable
+        .pipeThrough(new TransformStream(new SerialToFrame()))
+        .pipeThrough(new TransformStream(new FrameToData()));
+    }
+    return this.readable_;
+  }
+
+  public get writable(): WritableStream<Uint8Array> | null {
+    if (!this.writable_ && this.port.writable) {
+      this.writable_ = this.port.writable;
+    }
+    return this.writable_;
+  }
+
   async disconnect(): Promise<void> {
-    if (this.readable) await this.readable.getReader().cancel();
-    if (this.writeable) await this.writeable.getWriter().close();
+    if (this.readable) await this.readable.getReader().cancel('Disconnecting');
+    if (this.writable) await this.writable.getWriter().close();
     await this.port.close();
     this.connected = false;
   }
 
-  async writeRequest(req: RFIDFrame): Promise<RfidResponse> {
-    if (this.writeable == null) throw new RFIDError('writable is null');
+  async writeRequest(frame: RFIDFrame): Promise<RfidResponse> {
+    if (this.writable == null) throw new RFIDError('writable is null');
     if (this.readable == null) throw new RFIDError('readable was null');
-    const reader = this.readable.getReader();
-    const writer = this.writeable.getWriter();
-    const frame = req.frame();
-    await writer.write(Uint8Array.from([0xAA, 0xDD, 0x00, frame.length]));
-    await writer.write(frame);
+    const f = frame.frame();
+
+    const writer = this.writable.getWriter();
+    await writer.write(Uint8Array.from([0xAA, 0xDD, 0x00, f.length, ...f]));
     writer.releaseLock();
+
+    const reader = this.readable.getReader();
     const { done, value } = await reader.read();
     reader.releaseLock();
+
     if (done || value === undefined) throw new RFIDError('reader returned undefined value');
     return value;
   }
