@@ -3,13 +3,13 @@
 /* eslint-disable max-classes-per-file */
 
 // import RfidIOError from './Errors';
-import { LedColor } from './Interfaces';
+import { LedColor, ReturnStatus } from './Interfaces';
 import Tag from './Tag';
 
 export class RfidResponse {
   opCode: Uint8Array;
 
-  status: number;
+  status: ReturnStatus;
 
   data: Uint8Array;
 

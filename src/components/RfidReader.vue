@@ -4,7 +4,7 @@
       <v-col cols="12">
         <h1>RFID</h1>
         <p>Connect to an LF RFID reader</p>
-        <v-btn class="ma-2" @click="connect" v-if="!connected && webSerialSupported">
+        <v-btn class="ma-2" @click="connectSerial" v-if="!connected && webSerialSupported">
           <v-icon left>mdi-serial-port</v-icon>
           Connect serial
         </v-btn>
@@ -32,6 +32,8 @@
         <v-btn class="ma-2" @click="toggleSound">
           <v-icon>{{ soundIcon }}</v-icon>
         </v-btn>
+        <br>
+        <p class="text-12">{{ snackbarText }}</p>
       </v-col>
     </v-row>
   </v-container>
@@ -43,20 +45,17 @@
 import { defineComponent, ref, computed } from 'vue';
 import Pl2303WebUsbSerial from '@/composables/rfid/pl2303';
 import RfidReader from '@/composables/rfid/Reader';
-import {
-  Beep,
-  ReadTag,
-  SetLedColor,
-  WriteTag2,
-  WriteTag3,
-} from '@/composables/rfid/Comands';
 import Tag from '@/composables/rfid/Tag';
-import { LedColor, ReturnStatus } from '@/composables/rfid/Interfaces';
+import { ComPort } from '@/composables/rfid/Interfaces';
+import { CommTagError, NoTagError } from '@/composables/rfid/Errors';
 
 export default defineComponent({
   setup() {
     const webUsbSupported = ref('usb' in navigator);
     const webSerialSupported = ref('serial' in navigator);
+
+    const snackbar = ref(false);
+    const snackbarText = ref('');
 
     const playSound = ref(false);
     const toggleSound = () => {
@@ -69,34 +68,10 @@ export default defineComponent({
     const tag = ref(new Tag());
     const connectedString = computed(() => (connected.value ? 'Connected' : 'Not connected'));
 
-    const connectUsb = async () => {
-      try {
-        const device = await navigator.usb.requestDevice({ filters: [{ vendorId: 0x067b }] });
-        const port = new Pl2303WebUsbSerial(device);
-        rfid = new RfidReader(port);
-        await rfid.ready;
-        connected.value = rfid.connected;
-      } catch (error) {
-        console.error(error);
-      }
-    };
-
-    const connect = async () => {
-      const filters = [{ usbVendorId: 0x067b }];
-      try {
-        // console.log('Requesting port');
-        const port = await navigator.serial.requestPort({ filters });
-        rfid = new RfidReader(port);
-        rfid.ready.then(() => {
-          connected.value = true;
-          navigator.serial.addEventListener('disconnect', (event: Event) => {
-            console.log(event);
-            connected.value = false;
-          });
-        });
-      } catch (e) {
-        console.log(e);
-      }
+    const connect = async (port: ComPort): Promise<void> => {
+      rfid = new RfidReader(port);
+      await rfid.connect();
+      connected.value = rfid.isConnected;
     };
 
     const disconnect = async () => {
@@ -104,44 +79,64 @@ export default defineComponent({
       connected.value = false;
     };
 
-    const readTag = async () => {
-      const response = await rfid.writeRequest(new ReadTag());
-      if (response.status === 0) {
-        await rfid.writeRequest(new SetLedColor(LedColor.GREEN));
-        if (playSound.value) await rfid.writeRequest(new Beep(5));
-        setTimeout(async () => rfid.writeRequest(new SetLedColor(LedColor.NONE)), 300);
+    const connectUsb = async (): Promise<void> => {
+      try {
+        const device = await navigator.usb.requestDevice(
+          { filters: [{ vendorId: RfidReader.vendorId, productId: RfidReader.productId }] },
+        );
+        const port = new Pl2303WebUsbSerial(device);
+        await connect(port);
+      } catch (e) {
+        if (e.code === 8) { // No device selected
+          console.error(e.message);
+          return;
+        }
+        if (e.code === 19) { // Unable to claim interface
+          console.error(e.message);
+          return;
+        }
+        console.error(e.code, e.name, e.message);
+        throw e;
       }
-      tag.value = new Tag(response.data);
+      navigator.usb.addEventListener('disconnect', disconnect);
+    };
+
+    const connectSerial = async () => {
+      try {
+        const port = await navigator.serial.requestPort(
+          { filters: [{ usbVendorId: RfidReader.vendorId, usbProductId: RfidReader.productId }] },
+        );
+        connect(port);
+        port.addEventListener('disconnect', disconnect);
+      } catch (e) {
+        if (e instanceof DOMException && e.code === 8) { // No port selected by the user
+          console.error(e.message);
+          return;
+        }
+        throw e;
+      }
+    };
+
+    const readTag = async () => {
+      try {
+        tag.value = await rfid.readTag(playSound.value);
+        snackbar.value = false;
+        snackbarText.value = '';
+      } catch (e) {
+        if (e instanceof NoTagError) {
+          snackbar.value = true;
+          snackbarText.value = 'No tag detected';
+          return;
+        }
+        if (e instanceof CommTagError) {
+          snackbar.value = true;
+          snackbarText.value = 'Tag communication error';
+        }
+      }
     };
 
     const writeTag = async () => {
-      let { status, data } = await rfid.writeRequest(new WriteTag2(tag.value));
-      if (status !== ReturnStatus.OK) return;
-      ({ status, data } = await rfid.writeRequest(new ReadTag()));
-      if (
-        status === ReturnStatus.OK
-          && data.length === tag.value.data.length
-          && data.every((value, index) => tag.value.data[index] === value)
-      ) {
-        await rfid.writeRequest(new SetLedColor(LedColor.GREEN));
-        if (playSound.value) await rfid.writeRequest(new Beep(5));
-        setInterval(() => rfid.writeRequest(new SetLedColor(LedColor.NONE)), 300);
-        return;
-      }
-      ({ status, data } = await rfid.writeRequest(new WriteTag3(tag.value)));
-      if (status !== ReturnStatus.OK) return;
-      ({ status, data } = await rfid.writeRequest(new ReadTag()));
-      if (
-        status === ReturnStatus.OK
-        && data.length === tag.value.data.length
-        && data.every((value, index) => tag.value.data[index] === value)
-      ) {
-        await rfid.writeRequest(new SetLedColor(LedColor.GREEN));
-        if (playSound.value) await rfid.writeRequest(new Beep(5));
-        setInterval(() => rfid.writeRequest(new SetLedColor(LedColor.NONE)), 300);
-        return;
-      }
-      await rfid.writeRequest(new SetLedColor(LedColor.RED));
+      await rfid.writeTag(tag.value, playSound.value);
     };
 
     return {
@@ -152,10 +147,12 @@ export default defineComponent({
       tag,
       webUsbSupported,
       webSerialSupported,
+      snackbar,
+      snackbarText,
       readTag,
       toggleSound,
       writeTag,
-      connect,
+      connectSerial,
       connectUsb,
       disconnect,
     };

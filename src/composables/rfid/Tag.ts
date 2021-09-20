@@ -12,6 +12,17 @@ export default class Tag {
     return this.data.slice();
   }
 
+  public get length() : number {
+    return this.data.length;
+  }
+
+  equals(tag: Tag): boolean {
+    return (
+      tag.length === this.length
+      && this.data.every((value, index) => value === tag.data[index])
+    );
+  }
+
   toString(): string {
     return this.data.reduce((s, byte) => `${s} ${byte.toString(16).padStart(2, '0')}`, '');
   }
